@@ -156,7 +156,9 @@ def backtest_trade(db_path, symbol, entry_data):
                         
                         # Save to database if requested
                         if entry_data.get('save_to_db', True):
-                            success, message = insert_trading_entry(db_path, entry_result)
+                            # Create a copy of entry_result without save_to_db key
+                            entry_for_db = {k: v for k, v in entry_result.items() if k != 'save_to_db'}
+                            success, message = insert_trading_entry(db_path, entry_for_db)
                             if not success:
                                 logger.warning(f"Failed to save entry to database: {message}")
                         

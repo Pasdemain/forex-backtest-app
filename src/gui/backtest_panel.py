@@ -413,6 +413,7 @@ class BacktestEntryDialog(tk.Toplevel):
         
         # Prepare entry data
         entry_data = self._prepare_entry_data()
+        entry_data['save_to_db'] = True
         
         # Start backtest
         self.backtest_results = []
@@ -508,7 +509,7 @@ class BacktestEntryDialog(tk.Toplevel):
             "EntryPoint": self.entry_point_var.get(),
             "ImpactPosition": self.news_impact_var.get(),
             "NewsTypes": self.news_types_var.get(),
-            "save_to_db": False  # Don't save to DB during initial backtest
+            "save_to_db": True  # Don't save to DB during initial backtest
         }
 
 class BacktestPanel(ttk.Frame):
@@ -865,7 +866,7 @@ class BacktestPanel(ttk.Frame):
             # Update statistics labels
             self.total_trades_label.config(text=str(stats['total_entries']))
             self.win_rate_label.config(text=f"{stats['win_rate']:.1f}%")
-            self.avg_duration_label.config(text=f"{stats['average_duration']:.1f} hours")
+            self.avg_duration_label.config(text="N/A hours")
             
             # Update graphs
             self.update_equity_graph()
