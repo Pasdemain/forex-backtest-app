@@ -127,7 +127,11 @@ def insert_candle_data(db_path, df, timeframe, symbol):
     
     # Format time column if it's not a string
     if df['time'].dtype != 'object':
-        df['time'] = df['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        if hasattr(df['time'], 'dt'):
+            df['time'] = df['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            # If it's not already a string and doesn't have dt accessor
+            df['time'] = pd.to_datetime(df['time']).dt.strftime('%Y-%m-%d %H:%M:%S')
     
     # Rename volume column if needed
     if 'tick_volume' in df.columns:
