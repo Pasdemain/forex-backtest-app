@@ -1,14 +1,8 @@
-{
-  `path`: `src/gui/backtest_panel.py`,
-  `repo`: `forex-backtest-app`,
-  `owner`: `Pasdemain`,
-  `branch`: `main`,
-  `content`: `\"\"\"
+"""
 Backtest Panel Module
 
 This module provides the UI for backtesting trading strategies.
-\"\"\"
-
+"""
 import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -1126,4 +1120,3 @@ class BacktestPanel(ttk.Frame):
             logger.error(f"Error exporting graphs: {e}")
             messagebox.showerror("Error", f"Failed to export graphs: {e}")
         
-}
