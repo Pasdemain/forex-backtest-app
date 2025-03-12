@@ -653,5 +653,477 @@ class BacktestPanel(ttk.Frame):
         
         self.filter_h4_var = tk.StringVar(value=\"All\")
         h4_combo = ttk.Combobox(filter_frame, textvariable=self.filter_h4_var, values=[\"All\", \"Uptrend\", \"Downtrend\"], width=10)
-        h4_combo.grid(`
+        h4_combo.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+
+        ttk.Label(filter_frame, text="Result:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+        
+        self.filter_result_var = tk.StringVar(value="All")
+        result_combo = ttk.Combobox(filter_frame, textvariable=self.filter_result_var, values=["All", "Winning", "Losing"], width=10)
+        result_combo.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        apply_button = ttk.Button(filter_frame, text="Apply Filters", command=self.apply_filters)
+        apply_button.grid(row=3, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=10)
+        
+        # Statistics section
+        stats_frame = ttk.LabelFrame(main_frame, text="Statistics")
+        stats_frame.grid(row=2, column=0, columnspan=3, sticky=tk.EW, pady=10)
+        
+        # Create labels for statistics
+        ttk.Label(stats_frame, text="Total Trades:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.total_trades_label = ttk.Label(stats_frame, text="0")
+        self.total_trades_label.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        ttk.Label(stats_frame, text="Win Rate:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.win_rate_label = ttk.Label(stats_frame, text="0%")
+        self.win_rate_label.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        ttk.Label(stats_frame, text="Avg Duration:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+        self.avg_duration_label = ttk.Label(stats_frame, text="0 hours")
+        self.avg_duration_label.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        # Graphs section
+        graphs_frame = ttk.LabelFrame(main_frame, text="Performance Graphs")
+        graphs_frame.grid(row=3, column=0, columnspan=3, sticky=tk.NSEW, pady=10)
+        
+        # Make the graphs frame expandable
+        main_frame.grid_rowconfigure(3, weight=1)
+        main_frame.grid_columnconfigure(2, weight=1)
+        
+        # Create tabs for different graphs
+        graphs_notebook = ttk.Notebook(graphs_frame)
+        graphs_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Create tab frames
+        equity_tab = ttk.Frame(graphs_notebook)
+        win_rate_tab = ttk.Frame(graphs_notebook)
+        drawdown_tab = ttk.Frame(graphs_notebook)
+        
+        graphs_notebook.add(equity_tab, text="Equity Curve")
+        graphs_notebook.add(win_rate_tab, text="Win Rate Analysis")
+        graphs_notebook.add(drawdown_tab, text="Drawdown Analysis")
+        
+        # Create figures for each tab
+        self.equity_fig = plt.Figure(figsize=(5, 4), dpi=100)
+        self.equity_canvas = FigureCanvasTkAgg(self.equity_fig, equity_tab)
+        self.equity_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        self.win_rate_fig = plt.Figure(figsize=(5, 4), dpi=100)
+        self.win_rate_canvas = FigureCanvasTkAgg(self.win_rate_fig, win_rate_tab)
+        self.win_rate_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        self.drawdown_fig = plt.Figure(figsize=(5, 4), dpi=100)
+        self.drawdown_canvas = FigureCanvasTkAgg(self.drawdown_fig, drawdown_tab)
+        self.drawdown_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # Export buttons
+        export_frame = ttk.Frame(main_frame)
+        export_frame.grid(row=4, column=0, columnspan=3, sticky=tk.EW, pady=10)
+        
+        export_csv_button = ttk.Button(export_frame, text="Export to CSV", command=self.export_to_csv)
+        export_csv_button.pack(side=tk.LEFT, padx=5)
+        
+        export_graph_button = ttk.Button(export_frame, text="Export Graphs", command=self.export_graphs)
+        export_graph_button.pack(side=tk.LEFT, padx=5)
+    
+    def on_database_opened(self, db_path, symbol):
+        """Handle when a database is opened."""
+        self.current_db_path = db_path
+        self.current_symbol = symbol
+        
+        # Update labels
+        self.symbol_label.config(text=symbol)
+        self.db_label.config(text=db_path)
+        
+        # Load recent entries
+        self.load_recent_entries()
+        
+        # Update analysis
+        self.update_analysis()
+    
+    def load_recent_entries(self):
+        """Load recent entries from the database."""
+        if not self.current_db_path:
+            return
+        
+        # Clear existing entries
+        for item in self.entries_tree.get_children():
+            self.entries_tree.delete(item)
+        
+        try:
+            # Connect to the database
+            import sqlite3
+            conn = sqlite3.connect(self.current_db_path)
+            c = conn.cursor()
+            
+            # Get recent entries
+            c.execute("""
+                SELECT day, OpenTime, position, Result, TradeRatio, StoplossSize 
+                FROM trading_entries 
+                ORDER BY id DESC 
+                LIMIT 50
+            """)
+            
+            # Add to treeview
+            for row in c.fetchall():
+                self.entries_tree.insert('', tk.END, values=row)
+            
+            # Close connection
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error loading recent entries: {e}")
+            messagebox.showerror("Error", f"Failed to load recent entries: {e}")
+    
+    def on_entry_double_click(self, event):
+        """Handle double-click on a trading entry."""
+        # Get the selected item
+        selection = self.entries_tree.selection()
+        if not selection:
+            return
+        
+        item = self.entries_tree.item(selection[0])
+        values = item['values']
+        
+        # Show entry details
+        self.show_entry_details(values)
+    
+    def show_entry_details(self, values):
+        """Show entry details in a dialog."""
+        # Create a new dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Entry Details")
+        dialog.geometry("400x300")
+        dialog.transient(self)
+        
+        # Get full entry data
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self.current_db_path)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            # Get entry by matching several fields
+            c.execute("""
+                SELECT * FROM trading_entries 
+                WHERE day = ? AND OpenTime = ? AND position = ? AND TradeRatio = ? AND StoplossSize = ?
+                LIMIT 1
+            """, values[0:3] + values[4:6])
+            
+            entry = c.fetchone()
+            conn.close()
+            
+            if entry:
+                # Create a frame
+                frame = ttk.Frame(dialog, padding=10)
+                frame.pack(fill=tk.BOTH, expand=True)
+                
+                # Add fields
+                row = 0
+                for key in entry.keys():
+                    ttk.Label(frame, text=f"{key}:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+                    ttk.Label(frame, text=str(entry[key])).grid(row=row, column=1, sticky=tk.W, padx=5, pady=2)
+                    row += 1
+            else:
+                ttk.Label(dialog, text="Entry not found").pack(pady=20)
+        except Exception as e:
+            logger.error(f"Error getting entry details: {e}")
+            ttk.Label(dialog, text=f"Error: {e}").pack(pady=20)
+        
+        # Add close button
+        ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+    
+    def open_new_entry(self):
+        """Open dialog for a new backtest entry."""
+        if not self.current_db_path or not self.current_symbol:
+            messagebox.showerror("Error", "Please open a database first")
+            return
+        
+        BacktestEntryDialog(self, self.year_var.get(), self.month_var.get(), self.current_symbol, self.current_db_path)
+    
+    def open_batch_backtest(self):
+        """Open dialog for batch backtesting."""
+        messagebox.showinfo("Batch Backtest", "Batch backtest feature is not implemented yet")
+    
+    def apply_filters(self):
+        """Apply filters to the analysis."""
+        self.update_analysis()
+    
+    def update_analysis(self):
+        """Update the analysis with current filters."""
+        if not self.current_db_path:
+            return
+        
+        # Prepare filters
+        filters = {}
+        if self.filter_position_var.get() != "All":
+            filters['position'] = self.filter_position_var.get()
+        
+        if self.filter_h4_var.get() != "All":
+            filters['H4'] = self.filter_h4_var.get()
+        
+        if self.filter_result_var.get() != "All":
+            filters['Result'] = self.filter_result_var.get()
+        
+        # Get statistics
+        try:
+            stats = get_trading_statistics(self.current_db_path, filters)
+            
+            # Update statistics labels
+            self.total_trades_label.config(text=str(stats['total_trades']))
+            self.win_rate_label.config(text=f"{stats['win_rate']:.1f}%")
+            self.avg_duration_label.config(text=f"{stats['average_duration']:.1f} hours")
+            
+            # Update graphs
+            self.update_equity_graph()
+            self.update_win_rate_graph(stats)
+            self.update_drawdown_graph()
+        except Exception as e:
+            logger.error(f"Error updating analysis: {e}")
+            messagebox.showerror("Error", f"Failed to update analysis: {e}")
+    
+    def update_equity_graph(self):
+        """Update the equity curve graph."""
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self.current_db_path)
+            
+            # Get trading entries
+            query = """
+                SELECT * FROM trading_entries 
+                WHERE Result IN ('Winning', 'Losing')
+                ORDER BY StartDatetime
+            """
+            
+            df = pd.read_sql_query(query, conn)
+            conn.close()
+            
+            if not df.empty:
+                # Generate equity curve
+                equity_curve = generate_equity_curve(df.to_dict('records'))
+                
+                # Plot equity curve
+                self.equity_fig.clear()
+                ax = self.equity_fig.add_subplot(111)
+                
+                ax.plot(range(len(equity_curve)), equity_curve['balance'], marker='o', linestyle='-')
+                
+                # Add trade markers
+                for i, row in equity_curve.iterrows():
+                    color = 'green' if row['trade_result'] == 'Winning' else 'red'
+                    ax.plot(i, row['balance'], marker='o', color=color)
+                
+                ax.set_title('Equity Curve')
+                ax.set_xlabel('Trade Number')
+                ax.set_ylabel('Balance')
+                ax.grid(True)
+                
+                self.equity_fig.tight_layout()
+                self.equity_canvas.draw()
+        except Exception as e:
+            logger.error(f"Error updating equity graph: {e}")
+            self.equity_fig.clear()
+            ax = self.equity_fig.add_subplot(111)
+            ax.text(0.5, 0.5, f"Error: {e}", ha='center', va='center')
+            self.equity_canvas.draw()
+    
+    def update_win_rate_graph(self, stats):
+        """Update the win rate analysis graph."""
+        try:
+            self.win_rate_fig.clear()
+            
+            # Create subplots
+            fig = self.win_rate_fig
+            
+            # Win rate by stop loss
+            ax1 = fig.add_subplot(221)
+            labels = list(stats['by_stoploss'].keys())
+            win_rates = [stats['by_stoploss'][k]['win_rate'] for k in labels]
+            
+            ax1.bar(range(len(labels)), win_rates)
+            ax1.set_xticks(range(len(labels)))
+            ax1.set_xticklabels(labels)
+            ax1.set_ylim(0, 100)
+            ax1.set_title('Win Rate by Stop Loss')
+            ax1.set_ylabel('Win Rate (%)')
+            
+            # Win rate by ratio
+            ax2 = fig.add_subplot(222)
+            labels = list(stats['by_ratio'].keys())
+            win_rates = [stats['by_ratio'][k]['win_rate'] for k in labels]
+            
+            ax2.bar(range(len(labels)), win_rates)
+            ax2.set_xticks(range(len(labels)))
+            ax2.set_xticklabels(labels)
+            ax2.set_ylim(0, 100)
+            ax2.set_title('Win Rate by Ratio')
+            
+            # Win rate by session
+            ax3 = fig.add_subplot(223)
+            labels = list(stats['by_session'].keys())
+            win_rates = [stats['by_session'][k]['win_rate'] for k in labels]
+            
+            ax3.bar(range(len(labels)), win_rates)
+            ax3.set_xticks(range(len(labels)))
+            ax3.set_xticklabels(labels)
+            ax3.set_ylim(0, 100)
+            ax3.set_title('Win Rate by Session')
+            ax3.set_ylabel('Win Rate (%)')
+            
+            # Win rate by position
+            ax4 = fig.add_subplot(224)
+            labels = list(stats['by_position'].keys())
+            win_rates = [stats['by_position'][k]['win_rate'] for k in labels]
+            
+            ax4.bar(range(len(labels)), win_rates)
+            ax4.set_xticks(range(len(labels)))
+            ax4.set_xticklabels(labels)
+            ax4.set_ylim(0, 100)
+            ax4.set_title('Win Rate by Position')
+            
+            fig.tight_layout()
+            self.win_rate_canvas.draw()
+        except Exception as e:
+            logger.error(f"Error updating win rate graph: {e}")
+            self.win_rate_fig.clear()
+            ax = self.win_rate_fig.add_subplot(111)
+            ax.text(0.5, 0.5, f"Error: {e}", ha='center', va='center')
+            self.win_rate_canvas.draw()
+    
+    def update_drawdown_graph(self):
+        """Update the drawdown analysis graph."""
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self.current_db_path)
+            
+            # Get trading entries
+            query = """
+                SELECT * FROM trading_entries 
+                WHERE Result IN ('Winning', 'Losing')
+                ORDER BY StartDatetime
+            """
+            
+            df = pd.read_sql_query(query, conn)
+            conn.close()
+            
+            if not df.empty:
+                # Calculate drawdown
+                drawdown_data = calculate_drawdown(df.to_dict('records'))
+                
+                # Plot drawdown
+                self.drawdown_fig.clear()
+                ax = self.drawdown_fig.add_subplot(111)
+                
+                # Generate equity curve for plotting
+                equity_curve = generate_equity_curve(df.to_dict('records'))
+                
+                # Plot equity curve
+                ax.plot(range(len(equity_curve)), equity_curve['balance'], label='Balance')
+                
+                # Add drawdown periods
+                if drawdown_data['drawdown_periods']:
+                    for period in drawdown_data['drawdown_periods']:
+                        start_idx = equity_curve[equity_curve['datetime'] == period['start']].index[0] if period['start'] in equity_curve['datetime'].values else 0
+                        end_idx = equity_curve[equity_curve['datetime'] == period['end']].index[0] if period['end'] in equity_curve['datetime'].values else len(equity_curve) - 1
+                        
+                        ax.axvspan(start_idx, end_idx, alpha=0.3, color='red')
+                
+                ax.set_title(f'Drawdown Analysis (Max: {drawdown_data["max_drawdown_percent"]:.1f}%)')
+                ax.set_xlabel('Trade Number')
+                ax.set_ylabel('Balance')
+                ax.grid(True)
+                
+                self.drawdown_fig.tight_layout()
+                self.drawdown_canvas.draw()
+        except Exception as e:
+            logger.error(f"Error updating drawdown graph: {e}")
+            self.drawdown_fig.clear()
+            ax = self.drawdown_fig.add_subplot(111)
+            ax.text(0.5, 0.5, f"Error: {e}", ha='center', va='center')
+            self.drawdown_canvas.draw()
+    
+    def export_to_csv(self):
+        """Export trading data to CSV."""
+        if not self.current_db_path:
+            messagebox.showerror("Error", "Please open a database first")
+            return
+        
+        # Ask for file path
+        filepath = asksaveasfilename(
+            title="Export Trading Data",
+            defaultextension=".csv",
+            filetypes=[("CSV Files", "*.csv")]
+        )
+        
+        if not filepath:
+            return
+        
+        try:
+            # Connect to database
+            import sqlite3
+            conn = sqlite3.connect(self.current_db_path)
+            
+            # Get trading entries
+            query = "SELECT * FROM trading_entries"
+            
+            # Apply filters
+            conditions = []
+            params = []
+            
+            if self.filter_position_var.get() != "All":
+                conditions.append("position = ?")
+                params.append(self.filter_position_var.get())
+            
+            if self.filter_h4_var.get() != "All":
+                conditions.append("H4 LIKE ?")
+                params.append(f"%{self.filter_h4_var.get()}%")
+            
+            if self.filter_result_var.get() != "All":
+                conditions.append("Result = ?")
+                params.append(self.filter_result_var.get())
+            
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            # Execute query
+            df = pd.read_sql_query(query, conn, params=params)
+            conn.close()
+            
+            # Save to CSV
+            df.to_csv(filepath, index=False)
+            
+            messagebox.showinfo("Export", f"Data exported to {filepath}")
+        except Exception as e:
+            logger.error(f"Error exporting data: {e}")
+            messagebox.showerror("Error", f"Failed to export data: {e}")
+    
+    def export_graphs(self):
+        """Export graphs to image files."""
+        if not self.current_db_path:
+            messagebox.showerror("Error", "Please open a database first")
+            return
+        
+        # Ask for directory
+        from tkinter import filedialog
+        directory = filedialog.askdirectory(title="Select Directory for Graph Export")
+        
+        if not directory:
+            return
+        
+        try:
+            # Save equity curve
+            equity_path = os.path.join(directory, f"{self.current_symbol}_equity_curve.png")
+            self.equity_fig.savefig(equity_path, dpi=300, bbox_inches='tight')
+            
+            # Save win rate analysis
+            win_rate_path = os.path.join(directory, f"{self.current_symbol}_win_rate_analysis.png")
+            self.win_rate_fig.savefig(win_rate_path, dpi=300, bbox_inches='tight')
+            
+            # Save drawdown analysis
+            drawdown_path = os.path.join(directory, f"{self.current_symbol}_drawdown_analysis.png")
+            self.drawdown_fig.savefig(drawdown_path, dpi=300, bbox_inches='tight')
+            
+            messagebox.showinfo("Export", f"Graphs exported to {directory}")
+        except Exception as e:
+            logger.error(f"Error exporting graphs: {e}")
+            messagebox.showerror("Error", f"Failed to export graphs: {e}")
+        
 }
