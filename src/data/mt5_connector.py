@@ -1,42 +1,3 @@
-def get_broker_timezone_for_date(date_obj):
-    """
-    Get the broker timezone for a specific date.
-    Most European forex brokers follow European time changes:
-    - Winter (CET period): GMT+2 
-    - Summer (CEST period): GMT+3
-    
-    Args:
-        date_obj (datetime): The date to check
-        
-    Returns:
-        pytz.timezone: The broker timezone for that date
-    """
-    # Create a Europe/Paris timezone to check if date is in DST
-    paris_tz = pytz.timezone('Europe/Paris')
-    
-    # Localize the date to Paris timezone to check if it's in DST
-    try:
-        # If date is naive, assume it's in Paris timezone
-        if date_obj.tzinfo is None:
-            paris_date = paris_tz.localize(date_obj)
-        else:
-            paris_date = date_obj.astimezone(paris_tz)
-        
-        # Check if Paris is in DST (summer time)
-        is_dst = bool(paris_date.dst())
-        
-        if is_dst:
-            # Summer time: Paris is UTC+2, broker typically UTC+3
-            return pytz.timezone('Etc/GMT-3')  # GMT+3
-        else:
-            # Winter time: Paris is UTC+1, broker typically UTC+2  
-            return pytz.timezone('Etc/GMT-2')  # GMT+2
-            
-    except Exception as e:
-        logger.warning(f"Error determining DST for {date_obj}: {e}")
-        # Default to GMT+3 (summer time)
-        return pytz.timezone('Etc/GMT-3')
-
 """
 MetaTrader 5 Connector Module
 
@@ -60,6 +21,43 @@ from src.utils.config import get_config
 from src.data.database import insert_candle_data, init_db
 
 logger = logging.getLogger(__name__)
+
+
+def get_broker_timezone_for_date(date_obj):
+    """
+    Get the broker server timezone for a specific date.
+    Most European forex brokers (including those on MT5) follow:
+    - Winter (standard time): GMT+2  (when Europe/Paris is UTC+1)
+    - Summer (DST):           GMT+3  (when Europe/Paris is UTC+2)
+
+    The broker always stays 1 hour ahead of Paris.
+
+    Args:
+        date_obj (datetime): The date to check (naive datetime)
+
+    Returns:
+        pytz.timezone: The broker timezone for that date
+    """
+    paris_tz = pytz.timezone('Europe/Paris')
+
+    try:
+        if date_obj.tzinfo is None:
+            paris_date = paris_tz.localize(date_obj)
+        else:
+            paris_date = date_obj.astimezone(paris_tz)
+
+        is_dst = bool(paris_date.dst())
+
+        if is_dst:
+            # Summer: Paris = UTC+2, broker = UTC+3
+            return pytz.timezone('Etc/GMT-3')
+        else:
+            # Winter: Paris = UTC+1, broker = UTC+2
+            return pytz.timezone('Etc/GMT-2')
+
+    except Exception as e:
+        logger.warning(f"Error determining DST for {date_obj}: {e}")
+        return pytz.timezone('Etc/GMT-2')
 
 def check_mt5_installed():
     """
@@ -182,19 +180,17 @@ def fetch_historical_data(symbol, timeframe_str, from_date, to_date=None):
         df = pd.DataFrame(rates)
         
         # Convert time column from Unix timestamp to datetime
-        # MT5 timestamps are in broker server timezone which changes with European DST:
-        # - Winter (CET period): GMT+2, Summer (CEST period): GMT+3
+        # MT5 timestamps are in broker server time (GMT+2 winter / GMT+3 summer)
+        # NOT in UTC - we must localize to broker TZ first, then convert to target TZ
         df['time'] = pd.to_datetime(df['time'], unit='s')
-        
-        # Convert each timestamp with the appropriate broker timezone for that date
+
         converted_times = []
         for ts in df['time']:
             broker_tz = get_broker_timezone_for_date(ts)
-            # Localize to broker timezone then convert to target timezone
-            localized_time = ts.tz_localize(broker_tz)
-            target_time = localized_time.tz_convert(timezone)
-            converted_times.append(target_time)
-        
+            localized = ts.tz_localize(broker_tz)
+            converted = localized.tz_convert(timezone)
+            converted_times.append(converted)
+
         df['time'] = pd.Series(converted_times)
         
         logger.info(f"Retrieved {len(df)} bars for {symbol} on {timeframe_str}")
@@ -262,18 +258,16 @@ def fetch_and_store_data_for_symbol(symbol, db_path, timeframes=None, days_histo
                     
                     if rates is not None and len(rates) > 0:
                         df = pd.DataFrame(rates)
-                        # Convert timestamps correctly with dynamic timezone handling
+                        # Convert timestamps: MT5 timestamps are in broker server time
                         df['time'] = pd.to_datetime(df['time'], unit='s')
-                        
-                        # Convert each timestamp with the appropriate broker timezone for that date
+
                         converted_times = []
                         for ts in df['time']:
                             broker_tz = get_broker_timezone_for_date(ts)
-                            # Localize to broker timezone then convert to target timezone
-                            localized_time = ts.tz_localize(broker_tz)
-                            target_time = localized_time.tz_convert(timezone)
-                            converted_times.append(target_time)
-                        
+                            localized = ts.tz_localize(broker_tz)
+                            converted = localized.tz_convert(timezone)
+                            converted_times.append(converted)
+
                         df['time'] = pd.Series(converted_times)
                         # Store in database
                         insert_candle_data(db_path, df, timeframe, symbol)

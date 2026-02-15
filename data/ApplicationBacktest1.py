@@ -198,6 +198,11 @@ class NewEntryDialog(simpledialog.Dialog):
         # Bouton "Check News"
         self.check_news_btn = ttk.Button(master, text="Check News", command=self._check_news)
         self.check_news_btn.grid(column=2, row=current_row, sticky='w')
+
+        # Checkbox for M5 timeframe (M15 by default)
+        self.use_m5_var = tk.BooleanVar(value=False)  # False = M15 (default), True = M5
+        self.m5_checkbox = ttk.Checkbutton(master, text="M5", variable=self.use_m5_var)
+        self.m5_checkbox.grid(column=3, row=current_row, sticky='w')
         
         current_row += 1
         
@@ -308,8 +313,12 @@ class NewEntryDialog(simpledialog.Dialog):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         print(f"Open Value: {self.currency}")
-        # Utilisez db_time_str directement dans votre requête
-        cursor.execute("SELECT open FROM candle_M15 WHERE symbol = ? AND time = ?", (self.currency, db_time_str))
+
+        # Détermine la table à utiliser en fonction du checkbox
+        table_name = "candle_M5" if self.use_m5_var.get() else "candle_M15"
+
+        # Utilisez db_time_str directement dans votre requête avec la table sélectionnée
+        cursor.execute(f"SELECT open FROM {table_name} WHERE symbol = ? AND time = ?", (self.currency, db_time_str))
         result = cursor.fetchone()
 
         if result is not None:
@@ -673,7 +682,7 @@ class TradingApp:
     def _create_widgets(self):
         # Sélection de l'année
         ttk.Label(self.master, text="Year:").grid(column=0, row=0, sticky='w')
-        year_entry = ttk.Combobox(self.master, textvariable=self.year_var, values=list(range(2024, 2026)))
+        year_entry = ttk.Combobox(self.master, textvariable=self.year_var, values=list(range(2024, 2028)))
         year_entry.grid(column=1, row=0, sticky='ew')
         
         # Sélection du mois

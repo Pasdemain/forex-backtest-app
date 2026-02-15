@@ -19,7 +19,7 @@ DEFAULT_CONFIG = {
         "symbols": ["GBPUSD", "GBPJPY", "XAUUSD", "EURUSD", "AUDUSD", 
                     "EURGBP", "EURAUD", "EURJPY", "USDJPY"],
         "history_days": 730,  # 2 years
-        "timezone": "Etc/GMT-5"
+        "timezone": "Europe/Paris"
     },
     "trading": {
         "stoploss_sizes": [20, 25, 30],
