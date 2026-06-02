@@ -17,9 +17,6 @@ ENV/
 logs/*
 !logs/PLACEHOLDER
 
-# Database files
-data/*.db
-!data/PLACEHOLDER
 
 # Local config
 config/settings.json
