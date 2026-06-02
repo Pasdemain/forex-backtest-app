@@ -1,0 +1,9 @@
+Collecting MetaTrader5
+  Using cached metatrader5-5.0.5572-cp311-cp311-win_amd64.whl.metadata (2.5 kB)
+Collecting numpy>=1.7 (from MetaTrader5)
+  Using cached numpy-2.4.2-cp311-cp311-win_amd64.whl.metadata (6.6 kB)
+Using cached metatrader5-5.0.5572-cp311-cp311-win_amd64.whl (48 kB)
+Using cached numpy-2.4.2-cp311-cp311-win_amd64.whl (12.6 MB)
+Installing collected packages: numpy, MetaTrader5
+
+Successfully installed MetaTrader5-5.0.5572 numpy-2.4.2
